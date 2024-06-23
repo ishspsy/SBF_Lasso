@@ -652,7 +652,7 @@ for (jj in 1:d0){
 
 ## Debiased inference
 
-finaljt2 = function(M){
+deb_fun = function(M){
   
   ##### here new (1st)
   registerDoMC(cores=4)
