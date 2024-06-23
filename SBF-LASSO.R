@@ -641,7 +641,7 @@ fini = array(0, c(N,d0))
 h = h_opt_ftn(M=M,n0,d0,corr=corr,esd=esd, case=case, a, b)
 result = sim(lambda =0.5, M=M, n0=n0,d0=d0,h=h,corr=corr,esd=esd,case=case, fini=fini)
 
-
+## Draw coefficient functions
 par(mfrow=c(4,3))
 for (jj in 1:d0){
   plot(x0,result$f[,jj],col="blue")
