@@ -650,6 +650,175 @@ for (jj in 1:d0){
 
 
 
+## Debiased inference
+
+finaljt2 = function(M){
+  
+  ##### here new (1st)
+  registerDoMC(cores=4)
+  h_tmp1= foreach(i = M, .combine = 'list', .multicombine = T) %dopar% h_opt_ftn(M=i,n0,d0,corr=corr,esd=esd, case=case, a, b)
+  h =h_tmp1
+  fini = array(0, c(N,d0))
+  res_new = sim(lambda = 0.1, M=M,n0=n0,d0=d0,h=h,corr=corr,esd=esd,SCAD=0,case=case, fini=fini,pb=0)
+  est_f = res_new$f
+  write.csv(est_f, file= paste("est_f_", M, ".csv", sep=""))
+  
+  
+  ##### (2nd) copy the code (inside the sim function) in the note to create X, Y
+  f_fit<-matrix(0,nrow=N,ncol=d0)
+  zero_call<-rep(0,d0)
+  
+  m=M
+  set.seed(m)
+  print(m)
+  
+  X<-matrix(runif(n0*d0,a,b),nrow=n0,ncol=d0)
+  
+  if (corr>0.01){
+    S = array(0,c(d0,d0))
+    for (i1 in 1:d0){for (j1 in 1:d0){
+      S[i1,j1] = corr^(abs(i1-j1))}}
+    
+    X<-rtmvnorm(n0,sigma=S,lower=rep(a,d0),upper=rep(b,d0))}
+  
+  if (case==3){
+    X<-matrix(runif(n0*d0,0,1),nrow=n0,ncol=d0)}
+  
+  if (case==3.5){
+    X<-matrix(runif(n0*d0,0,1),nrow=n0,ncol=d0)
+    U= matrix(runif(n0,0,1), nrow=n0, ncol=1)
+    U = matrix(rep(U,d0), nrow=n0, byrow=F)
+    X= (X+U)/2}
+  
+  f_tr<-matrix(0,nrow=n0,ncol=d0)
+  for(i in 1:n0){
+    f_tr[i,1]<-f1(X[i,1])
+    f_tr[i,2]<-f2(X[i,2])
+    f_tr[i,3]<-f3(X[i,3])
+    f_tr[i,4]<-f4(X[i,4])
+  }
+  Y<-c()
+  for(i in 1:n0){
+    Y[i]<-sum(f_tr[i,])+rnorm(1,0,esd)
+  }
+  f_nw<-NW(Y,X,x,h,K_h) 
+  
+  
+  # (3rd) prepare optimization function
+  ########### here ######
+  m=length(x0)
+  matpb = matrix(rep(1:d0, d0), ncol=d0); matpb2 =t(matpb)
+  parpjkj = function(mm){
+    j = matpb2[mm]; i = matpb[mm];
+    if (i != j){
+      return(pjkj(x0,  X, c(i,j), h, K_h))}
+    if (i == j){
+      return(array(1, c(m,m)))
+    }
+  }
+  
+  registerDoMC(cores=3)
+  tmp2=foreach(k = 1:(d0^2), .combine='cbind')  %dopar% parpjkj(k)
+  
+  phi=array(0, c(m*d0, m*d0))
+  jjj=0
+  for (mm in 1:(d0^2)){
+    jjj=jjj+1
+    j = matpb2[mm]; i = matpb[mm];
+    indj = (m*(j-1)+1):(m*j);     indi = (m*(i-1)+1):(m*i);
+    phi[indj,indi] = tmp2[, (m*(jjj-1)+1) : (m*jjj)]
+  }
+  
+  phiphi = phi; hh=h; est_f_est_f=est_f;  XX=X # be careful when running
+  
+  
+  ####### inference j_true
+  
+  
+  
+  #finaljt = function(j_true){ 
+  
+  phi=phiphi; h=hh; est_f= est_f_est_f; X=XX
+  ind1=1:m; ind2= (m*(j_true-1)+1) : (m*j_true)
+  indtotal = 1:(m*d0); indtotal[ind1]=ind2; indtotal[ind2]=ind1; 
+  phi = phiphi[indtotal,indtotal]
+  h[j_true]=hh[1]; h[1]=hh[j_true];
+  est_f[,j_true] = est_f_est_f[,1]; est_f[,1] = est_f_est_f[,j_true]
+  X[,j_true]= XX[,1]; X[,1]=XX[,j_true]
+  
+  write.csv(phi, file=paste("phidata_", M, "_", j_true, ".csv", sep=""))
+  
+  matlab.lines <- c(
+    "d= 10;",
+    "m = 101;",
+    "ith=[ones(m,m), zeros(m, m*(d-1))];",
+    "ith2 = zeros(m*d,d);",
+    "for i=1:d",
+    "indd = (m*(i-1)+1) : (m*i);",
+    "ith2(indd,i)=1;",
+    "end",
+    "phi = zeros(m*d,m*d);",
+    "for i=1:d",
+    "indd = (m*(i-1)+1) : (m*i);",
+    "phi(indd,indd) = 1+phi(indd,indd);",
+    "end",
+    "gamma=0.02;",
+    "aaa=mfilename('fullpath')",
+    "aaaind=strfind(aaa, '_');",
+    "aaaind_length= length(aaaind); aaaind1 = aaaind(aaaind_length-1); aaaind2 = aaaind(aaaind_length);",
+    "M_ind = aaa((aaaind1+1):(aaaind2-1)); M = str2double(M_ind);",
+    "j_ind = aaa((aaaind2+1):(length(aaa))); j_true = str2double(j_ind);",
+    "phi=csvread(sprintf('phidata_%d_%d.csv', M, j_true),1,1);",
+    "cvx_begin", 
+    "variable Q(m, m, d)",
+    "minimize(sum(max(norms(Q,2,2))))",
+    "subject to",
+    "Q(:,:,1)== 0",
+    "((ith-(Q(:,:)+ ith)*phi/m).^2) *  ith2  <= m*gamma^2",
+    "cvx_end",
+    "csvwrite(sprintf('Q_%d_%d.csv', M, j_true),Q(:,:),1,0)"
+  )
+  date2 = paste("opt_smooth_", M, "_", j_true, ".m", sep="")
+  writeLines(matlab.lines, con=date2)
+  
+  ith=cbind(array(1,c(m,m)), array(0,c(m, m*(d0-1))));
+  ithh = array(0, c(m*d0,m*d0))
+  
+  ith2 = array(0,c(m*d0,d0));
+  for (i in 1:d0){
+    indd = (m*(i-1)+1) : (m*i);
+    ith2[indd,i]=1;
+  }
+  
+  
+  # (4th) after optimization function
+  Qest = read.csv(paste("Q_", M, "_", j_true, ".csv", sep=""), header=TRUE)   # phi:  dm by dm
+  Qest=as.matrix(Qest)
+  
+  est_f_debiased = matrix(est_f[,1], ncol=1)+ (Qest +ith) %*% (matrix(f_nw,ncol=1) - matrix(rep(mean(Y),m*d0),ncol=1) - phi %*% matrix(est_f,ncol=1)/m)/m^2
+  
+  serror_fun =function(i){
+    Khh = NULL
+    for (jj in 1:d0){
+      Khh = rbind(Khh, matrix(K_h(x0,X[i,jj],h[jj]),ncol=1))
+    }
+    
+    pjx=p_j(x0, X, 1, h, K_h)
+    return((sqrt(h[1]/n0) * (matrix(K_h(x0,X[i,1],h[1]),ncol=1) /pjx +  Qest %*%Khh))^2)}
+  
+  
+  registerDoMC(cores=3)
+  tmp2=foreach(i = 1:n0, .combine='+')  %dopar% serror_fun(i)
+  
+  obj1=est_f_debiased-qnorm(0.975)*sqrt(tmp2/(n0*h[1]))  
+  obj2=est_f_debiased+qnorm(0.975)*sqrt(tmp2/(n0*h[1]))  
+  
+  results_set=cbind(results_set, sqrt(n0*h[1]) * (est_f_debiased-f_eval[,j_true])/sqrt(tmp2))
+}
+
+
+
+
 
 
 
