@@ -18,7 +18,9 @@
 
 - sparse_SBF_fit: main SBF algorithm.
 
-- sim: simulation analysis.
+- deb_fun: debiased inference function.
+
+- sim: simulation analysis function.
 
 
 ## Authors
