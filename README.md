@@ -27,7 +27,7 @@
 
 * Eun Ryung Lee (erlee@skku.edu), Seyoung Park (ishspsy@yonsei.ac.kr), Enno Mammen (mammen@math.uni-heidelberg.de), and Byeong U. Park (bupark2000@gmail.com)
   
- Department of Statistics, Sungkyunkwan University, Department of Statistics, Yonsei University, Institute for Applied Mathematics, Heidelberg University, Department of Statistics, Seoul National University.
+ Department of Statistics, Sungkyunkwan University, Department of Applied Statistics, Yonsei University, Institute for Applied Mathematics, Heidelberg University, Department of Statistics, Seoul National University.
 
 
 ## License
